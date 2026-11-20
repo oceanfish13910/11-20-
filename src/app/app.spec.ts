@@ -3,22 +3,18 @@ import { App } from './app';
 
 describe('App', () => {
   beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [App],
-    })
-      .compileComponents();
+    await TestBed.configureTestingModule({ imports: [App] }).compileComponents();
   });
 
   it('should create the app', () => {
     const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    expect(app).toBeTruthy();
+    expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('should render title', async () => {
+  it('should render the workshop title', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, CLAE');
+    expect(compiled.querySelector('h1')?.textContent).toContain('記憶書籤共創工作坊');
   });
 });

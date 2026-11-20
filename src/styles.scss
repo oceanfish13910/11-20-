@@ -1,1 +1,73 @@
-/* You can add global styles to this file, and also import other style files */
+@use 'tailwindcss';
+
+/* ---- 原 index.html 內嵌的全域樣式 ---- */
+.font-serif {
+  font-family: 'Noto Serif TC', 'Songti TC', 'Kaiti TC', 'DFKai-SB', Georgia, serif;
+}
+.font-sans {
+  font-family:
+    'Noto Sans TC',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+
+body {
+  background-color: #faf8f5;
+  color: #262623;
+}
+
+.cotton-paper-bg {
+  background-color: #faf8f5;
+  background-image:
+    radial-gradient(rgba(166, 58, 43, 0.035) 1px, transparent 0),
+    radial-gradient(rgba(197, 155, 39, 0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+  background-position:
+    0 0,
+    12px 12px;
+}
+
+@media screen {
+  .print-only-container {
+    display: none !important;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+  html,
+  body {
+    width: 297mm;
+    height: 210mm;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #faf8f5 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only-container {
+    display: block !important;
+    width: 297mm;
+    margin: 0;
+    padding: 0;
+  }
+  .print-a4-page {
+    width: 297mm !important;
+    height: 210mm !important;
+    page-break-after: always;
+    break-after: page;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .print-a4-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}

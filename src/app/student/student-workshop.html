@@ -1,0 +1,663 @@
+<main class="no-print cotton-paper-bg max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+  <div
+    class="bg-[#F4F0E8] border border-[#D8D0C5] rounded-2xl p-4 sm:p-5 mb-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
+  >
+    <div class="flex items-start gap-3">
+      <div
+        class="p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8D0C5] text-[#A63A2B] shrink-0 mt-0.5"
+      >
+        <app-icon name="book-open" cls="w-5 h-5" />
+      </div>
+      <div>
+        <h2 class="font-serif font-bold text-base sm:text-lg text-[#262623]">
+          一頁府城・百年書籤｜創作投稿工作坊
+        </h2>
+        <p class="text-xs sm:text-sm text-[#5C524B] mt-1 leading-relaxed">
+          <strong>正面題字</strong>以傳統直書呈現你對府城或家鄉的深刻印象（50
+          字以內），並搭配風景相片或留白手繪框；<strong>背面尺素</strong>則像一封典雅的棉紙家書，溫潤記錄你與家人長輩訪談的珍貴記憶（300
+          字以內）。填寫完成並上傳相片後，直接按下<strong>「確認送出」</strong>即可傳送至協作後台。
+        </p>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      (click)="onResetToBlank()"
+      class="self-start md:self-center shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#D8D0C5] bg-[#FAF8F5] hover:bg-[#EAE1D2] text-xs font-medium text-[#5C524B] transition-colors cursor-pointer"
+    >
+      <app-icon name="refresh-cw" cls="w-3.5 h-3.5" />
+      <span>清空重寫全新書籤</span>
+    </button>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+    <form
+      (submit)="onSubmit($event)"
+      class="lg:col-span-7 bg-[#F4F0E8]/65 border border-[#D8D0C5] rounded-2xl p-5 sm:p-6 shadow-xs space-y-6"
+    >
+      <!-- 步驟壹：創作者資訊與地理分區 -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 border-b border-[#D8D0C5] pb-2">
+          <span
+            class="w-6 h-6 rounded-full bg-[#A63A2B] text-[#FAF8F5] text-xs font-serif font-bold flex items-center justify-center"
+            >壹</span
+          >
+          <h3 class="font-serif font-bold text-base text-[#262623]">創作者資訊與記憶座標標記</h3>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="student-class" class="block text-sm font-medium text-[#262623] mb-1.5">
+              班級與座號／姓名 <span class="text-[#A63A2B]">*</span>
+            </label>
+            <div class="flex gap-2">
+              <select
+                id="student-class"
+                (change)="onClassChange(val($event))"
+                class="w-28 shrink-0 px-3 py-2.5 rounded-lg border border-[#D8D0C5] bg-[#FAF8F5] text-sm text-[#262623] focus:outline-none focus:border-[#A63A2B] focus:ring-1 focus:ring-[#A63A2B]"
+              >
+                <option value="" [selected]="selectedClass() === ''">選班級</option>
+                @for (c of classOptions; track c) {
+                  <option [value]="c" [selected]="selectedClass() === c">{{ c }} 班</option>
+                }
+              </select>
+              <div class="relative flex-1">
+                <app-icon
+                  name="user"
+                  cls="w-4 h-4 text-[#8A7F76] absolute left-3 top-1/2 -translate-y-1/2"
+                />
+                <input
+                  type="text"
+                  aria-label="座號與姓名"
+                  [value]="nameWithoutClass()"
+                  (input)="onNameChange(val($event))"
+                  placeholder="座號與姓名（例：05王小明）"
+                  class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-[#D8D0C5] bg-[#FAF8F5] text-sm focus:outline-none focus:border-[#A63A2B] focus:ring-1 focus:ring-[#A63A2B]"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- 自訂地理分區下拉選單 -->
+          <div #zoneDropdown class="relative">
+            <span class="block text-sm font-medium text-[#262623] mb-1.5"
+              >記憶分區（切換時地圖自動飛越聚焦）</span
+            >
+            <button
+              type="button"
+              (click)="isZoneDropdownOpen.set(!isZoneDropdownOpen())"
+              class="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer"
+              [class]="
+                isZoneDropdownOpen()
+                  ? 'border-[#A63A2B] ring-2 ring-[#A63A2B]/15 bg-[#FFFDF9] shadow-sm'
+                  : 'border-[#D8D0C5] bg-[#FAF8F5] hover:border-[#A63A2B]/60'
+              "
+              [attr.aria-expanded]="isZoneDropdownOpen()"
+            >
+              <div class="flex items-center gap-2 min-w-0">
+                <app-icon name="map-pin" cls="w-4 h-4 text-[#A63A2B] shrink-0" />
+                <span
+                  class="shrink-0 w-2.5 h-2.5 rounded-full border"
+                  [style.background-color]="selectedZone().badgeText"
+                  [style.border-color]="selectedZone().badgeBorder"
+                ></span>
+                <span class="font-serif font-bold text-sm text-[#262623] truncate">{{
+                  selectedZone().name
+                }}</span>
+              </div>
+              <app-icon
+                name="chevron-down"
+                [cls]="
+                  'w-4 h-4 text-[#7A6F66] shrink-0 transition-transform duration-200 ' +
+                  (isZoneDropdownOpen() ? 'rotate-180 text-[#A63A2B]' : '')
+                "
+              />
+            </button>
+
+            @if (isZoneDropdownOpen()) {
+              <div
+                class="absolute z-40 left-0 right-0 mt-1.5 rounded-2xl border border-[#D8D0C5] bg-[#FAF8F5] shadow-xl overflow-hidden py-1.5 max-h-72 overflow-y-auto"
+              >
+                @for (z of zones; track z.id) {
+                  <button
+                    type="button"
+                    (click)="onZoneChange(z.name)"
+                    class="w-full px-3.5 py-2.5 text-left transition-colors flex items-start justify-between gap-2.5 cursor-pointer"
+                    [class]="
+                      z.name === form().locationZone ? 'bg-[#F7ECEA]/85' : 'hover:bg-[#F4F0E8]'
+                    "
+                  >
+                    <div class="space-y-0.5 min-w-0">
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="inline-block px-2 py-0.5 rounded-md text-[11px] font-serif font-bold border"
+                          [style.background-color]="z.badgeBg"
+                          [style.color]="z.badgeText"
+                          [style.border-color]="z.badgeBorder"
+                          >{{ z.shortName }}</span
+                        >
+                        <span class="font-serif font-bold text-xs text-[#262623]">{{
+                          z.name
+                        }}</span>
+                      </div>
+                      <p class="text-[11px] text-[#6E6259] truncate pl-0.5">{{ z.description }}</p>
+                    </div>
+                    @if (z.name === form().locationZone) {
+                      <app-icon name="check" cls="w-4 h-4 text-[#A63A2B] shrink-0 mt-1" />
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        @if (form().locationZone === '其他／自訂地點') {
+          <div class="p-3.5 rounded-xl bg-[#F7ECEA] border border-[#A63A2B]/35 space-y-2">
+            <label
+              for="student-custom-zone"
+              class="block text-xs font-serif font-bold text-[#A63A2B]"
+            >
+              自訂家鄉／城市區域名稱 <span class="text-[#A63A2B]">*</span>
+            </label>
+            <input
+              id="student-custom-zone"
+              type="text"
+              [value]="form().customZoneName"
+              (input)="patch({ customZoneName: val($event) })"
+              placeholder="例：澎湖・馬公中央老街、金門・水頭聚落..."
+              class="w-full px-3.5 py-2 rounded-lg border border-[#A63A2B]/40 bg-[#FAF8F5] text-sm focus:outline-none focus:border-[#A63A2B]"
+            />
+          </div>
+        }
+
+        <div>
+          <label for="student-landmark" class="block text-sm font-medium text-[#262623] mb-1.5"
+            >具體地標名稱（顯示於書籤正面視覺框下方）</label
+          >
+          <input
+            id="student-landmark"
+            type="text"
+            [value]="form().landmarkLabel"
+            (input)="patch({ landmarkLabel: val($event) })"
+            placeholder="例：竹園岡・紅磚門、府城・孔廟、五條港・神農街"
+            class="w-full px-3.5 py-2.5 rounded-lg border border-[#D8D0C5] bg-[#FAF8F5] text-sm focus:outline-none focus:border-[#A63A2B] focus:ring-1 focus:ring-[#A63A2B]"
+          />
+          <div class="flex flex-wrap items-center gap-1.5 mt-2">
+            <span class="text-xs text-[#7A6F66]">快速帶入：</span>
+            @for (tag of quickLandmarks; track tag) {
+              <button
+                type="button"
+                (click)="patch({ landmarkLabel: tag })"
+                class="text-xs px-2.5 py-1 rounded-md bg-[#FAF8F5] border border-[#D8D0C5] hover:border-[#A63A2B] text-[#5C524B] transition-colors cursor-pointer"
+              >
+                {{ tag }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- 三段式記憶足跡互動地圖 -->
+        <app-taiwan-memory-map
+          [bookmarks]="store.bookmarks()"
+          [activeCoords]="form().mapCoords"
+          [activeLabel]="activeLabel()"
+          [zoneDefaultCoords]="selectedZone().coords || null"
+          [zoomStage]="mapZoomStage()"
+          (zoomStageChange)="mapZoomStage.set($event)"
+          (selectCoords)="onSelectCoords($event)"
+          [refreshMap]="refreshMap"
+          [interactive]="true"
+        />
+      </div>
+
+      <!-- 步驟貳：正面題字與風景留影 -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between border-b border-[#D8D0C5] pb-2">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-6 h-6 rounded-full bg-[#A63A2B] text-[#FAF8F5] text-xs font-serif font-bold flex items-center justify-center"
+              >貳</span
+            >
+            <h3 class="font-serif font-bold text-base text-[#262623]">
+              正面題字：寫下你的府城或家鄉印象
+            </h3>
+          </div>
+          <span
+            class="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+            [class]="
+              sideACount() > 50
+                ? 'bg-[#A63A2B] text-[#FAF8F5]'
+                : 'bg-[#FAF8F5] border border-[#D8D0C5] text-[#5C524B]'
+            "
+            >{{ sideACount() }} / 50 字</span
+          >
+        </div>
+
+        <div>
+          <label for="student-side-a" class="block text-sm font-medium text-[#262623] mb-1.5">
+            正面題字：寫下你的府城或家鄉印象（50 字以內） <span class="text-[#A63A2B]">*</span>
+          </label>
+          <textarea
+            id="student-side-a"
+            rows="3"
+            [value]="form().sideAText"
+            (focus)="previewSide.set('A')"
+            (input)="previewSide.set('A'); patch({ sideAText: val($event) })"
+            placeholder="凝鍊一段屬於你與這座城市的詩意片刻，右側即時呈現傳統直書韻味..."
+            class="w-full px-3.5 py-2.5 rounded-lg border bg-[#FAF8F5] font-serif text-sm leading-relaxed focus:outline-none focus:ring-1"
+            [class]="
+              sideACount() > 50
+                ? 'border-[#A63A2B] focus:border-[#A63A2B] focus:ring-[#A63A2B]'
+                : 'border-[#D8D0C5] focus:border-[#A63A2B] focus:ring-[#A63A2B]'
+            "
+          ></textarea>
+          @if (sideACount() > 50) {
+            <p class="text-xs text-[#A63A2B] mt-1 flex items-center gap-1 font-medium">
+              <app-icon name="alert-circle" cls="w-3.5 h-3.5" />
+              <span
+                >已超過 50 字上限（目前
+                {{ sideACount() }} 字），請適度精簡以展現直書留白美感。</span
+              >
+            </p>
+          }
+        </div>
+
+        <div class="space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="block text-sm font-medium text-[#262623]"
+              >風景畫框風格（可上傳照片套用藝術濾鏡，或留白印出後親手繪製）</span
+            >
+
+            <div class="flex flex-wrap items-center gap-2">
+              <input
+                #studentFile
+                type="file"
+                accept="image/*"
+                (change)="onImageUpload($event)"
+                class="hidden"
+              />
+              <button
+                type="button"
+                (click)="studentFile.click()"
+                [disabled]="isProcessingFilters()"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#A63A2B] hover:bg-[#872D21] text-[#FAF8F5] text-xs font-medium transition-colors cursor-pointer"
+              >
+                <app-icon name="upload" cls="w-3.5 h-3.5" />
+                <span>{{
+                  isProcessingFilters()
+                    ? '濾鏡運算中...'
+                    : form().originalImage
+                      ? '更換上傳相片'
+                      : '上傳地點相片'
+                }}</span>
+              </button>
+
+              <button
+                type="button"
+                (click)="onLoadDemoPhoto()"
+                [disabled]="isProcessingFilters()"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#D8D0C5] bg-[#FAF8F5] hover:bg-[#EAE1D2] text-[#262623] text-xs font-medium transition-colors cursor-pointer"
+              >
+                <app-icon name="wand2" cls="w-3.5 h-3.5 text-[#A63A2B]" />
+                <span>載入範例照片測試濾鏡</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            @for (vm of visualModes; track vm.id) {
+              <button
+                type="button"
+                (click)="onVisualModeClick(vm.id)"
+                class="px-2.5 py-2 rounded-xl border text-xs font-serif font-semibold transition-all cursor-pointer text-center"
+                [class]="
+                  form().visualMode === vm.id
+                    ? 'bg-[#A63A2B] text-[#FAF8F5] border-[#A63A2B] shadow-xs'
+                    : 'bg-[#FAF8F5] text-[#5C524B] border-[#D8D0C5] hover:border-[#A63A2B]/50'
+                "
+              >
+                {{ vm.label }}
+              </button>
+            }
+          </div>
+
+          @if (form().originalImage) {
+            <div class="p-3.5 rounded-xl bg-[#FAF8F5] border border-[#D8D0C5] space-y-2.5">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-serif font-bold text-[#262623]"
+                  >相片質感即時預覽（點擊縮圖切換書籤正面效果）</span
+                >
+                <span class="text-[11px] font-serif text-[#A63A2B] font-semibold"
+                  >目前：{{ currentModeLabel() }}</span
+                >
+              </div>
+
+              <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                @for (thumb of photoThumbs(); track thumb.id) {
+                  <button
+                    type="button"
+                    (click)="previewSide.set('A'); patch({ visualMode: thumb.id })"
+                    class="group rounded-xl overflow-hidden border transition-all cursor-pointer flex flex-col text-left"
+                    [class]="
+                      form().visualMode === thumb.id
+                        ? 'border-[#A63A2B] ring-2 ring-[#A63A2B]/25 bg-[#F7ECEA] shadow-xs'
+                        : 'border-[#D8D0C5] bg-[#FFFDF9] hover:border-[#A63A2B]/60'
+                    "
+                  >
+                    <div class="relative w-full aspect-[4/3] bg-[#F4F0E8] overflow-hidden">
+                      @if (thumb.src) {
+                        <img
+                          [src]="thumb.src"
+                          [alt]="thumb.label"
+                          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                      }
+                      @if (form().visualMode === thumb.id) {
+                        <span
+                          class="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#A63A2B] text-[#FAF8F5] flex items-center justify-center shadow-xs"
+                        >
+                          <app-icon name="check" cls="w-2.5 h-2.5" />
+                        </span>
+                      }
+                    </div>
+                    <span
+                      class="px-1.5 py-1.5 text-[11px] font-serif font-semibold text-center leading-tight truncate w-full"
+                      [class]="form().visualMode === thumb.id ? 'text-[#A63A2B]' : 'text-[#5C524B]'"
+                      >{{ thumb.label }}</span
+                    >
+                  </button>
+                }
+              </div>
+            </div>
+          }
+
+          @if (form().visualMode === 'blank-sketch') {
+            <div
+              class="p-3.5 rounded-xl bg-[#FAF8F5] border border-[#D8D0C5] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            >
+              <span class="text-xs text-[#5C524B]"
+                >印出後將呈現純淨棉紙留白框與四角對位線，方便用代針筆或色鉛筆親手繪製記憶風景。</span
+              >
+              <button
+                type="button"
+                (click)="previewSide.set('A'); patch({ dotGrid: !form().dotGrid })"
+                class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer"
+                [class]="
+                  form().dotGrid
+                    ? 'bg-[#A63A2B] text-[#FAF8F5] border-[#A63A2B]'
+                    : 'bg-[#F4F0E8] text-[#5C524B] border-[#D8D0C5]'
+                "
+              >
+                <app-icon name="grid" cls="w-3.5 h-3.5" />
+                <span>{{
+                  form().dotGrid ? '✓ 顯示極淡點陣構圖輔助點' : '開啟極淡點陣構圖輔助點'
+                }}</span>
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- 步驟參：背面尺素 -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between border-b border-[#D8D0C5] pb-2">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-6 h-6 rounded-full bg-[#A63A2B] text-[#FAF8F5] text-xs font-serif font-bold flex items-center justify-center"
+              >參</span
+            >
+            <h3 class="font-serif font-bold text-base text-[#262623]">
+              背面尺素：記錄與家人長輩訪談的故事
+            </h3>
+          </div>
+          <span
+            class="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+            [class]="
+              sideBCount() > 300
+                ? 'bg-[#A63A2B] text-[#FAF8F5]'
+                : 'bg-[#FAF8F5] border border-[#D8D0C5] text-[#5C524B]'
+            "
+            >{{ sideBCount() }} / 300 字</span
+          >
+        </div>
+
+        <div>
+          <label for="student-interviewee" class="block text-sm font-medium text-[#262623] mb-1.5"
+            >訪談對象（填寫稱謂即可，將顯示於背面信箋標題）</label
+          >
+          <div class="relative">
+            <app-icon
+              name="message-square-quote"
+              cls="w-4 h-4 text-[#A63A2B] absolute left-3 top-1/2 -translate-y-1/2"
+            />
+            <input
+              id="student-interviewee"
+              type="text"
+              [value]="form().interviewee"
+              (focus)="previewSide.set('B')"
+              (input)="previewSide.set('B'); patch({ interviewee: val($event) })"
+              placeholder="例：父親、母親、伯父、祖母、外公"
+              class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-[#D8D0C5] bg-[#FAF8F5] text-sm focus:outline-none focus:border-[#A63A2B] focus:ring-1 focus:ring-[#A63A2B]"
+            />
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5 mt-2">
+            <span class="text-xs text-[#7A6F66]">快速帶入稱謂：</span>
+            @for (title of intervieweeTitles; track title) {
+              <button
+                type="button"
+                (click)="previewSide.set('B'); patch({ interviewee: title })"
+                class="text-xs px-2.5 py-1 rounded-md bg-[#FAF8F5] border border-[#D8D0C5] hover:border-[#A63A2B] text-[#5C524B] transition-colors cursor-pointer"
+              >
+                {{ title }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div>
+          <label for="student-side-b" class="block text-sm font-medium text-[#262623] mb-1.5"
+            >背面尺素：記錄與家人長輩訪談的故事（300 字以內）</label
+          >
+          <textarea
+            id="student-side-b"
+            rows="5"
+            [value]="form().sideBText"
+            (focus)="previewSide.set('B')"
+            (input)="previewSide.set('B'); patch({ sideBText: val($event) })"
+            placeholder="從容記錄與家人長輩訪談的在地記憶細節、老街滋味或人生勉勵（300 字以內；信箋下方已預留親筆題字欄，印出後可邀請家人寫下對你的祝福）..."
+            class="w-full px-3.5 py-2.5 rounded-lg border bg-[#FAF8F5] font-serif text-sm leading-relaxed focus:outline-none focus:ring-1"
+            [class]="
+              sideBCount() > 300
+                ? 'border-[#A63A2B] focus:border-[#A63A2B] focus:ring-[#A63A2B]'
+                : 'border-[#D8D0C5] focus:border-[#A63A2B] focus:ring-[#A63A2B]'
+            "
+          ></textarea>
+          <div class="mt-1.5 text-xs text-[#6E6259]">
+            ※ 書籤背面下方已預留「家人寄語：」親筆書寫底線，成品印出後可請家人長輩親手題字祝福。
+          </div>
+          @if (sideBCount() > 300) {
+            <p class="text-xs text-[#A63A2B] mt-1 flex items-center gap-1 font-medium">
+              <app-icon name="alert-circle" cls="w-3.5 h-3.5" />
+              <span
+                >已超過 300 字上限（目前 {{ sideBCount() }} 字），請適度精簡以完整呈現故事。</span
+              >
+            </p>
+          }
+        </div>
+
+        <!-- 送出區 -->
+        <div class="pt-3 border-t border-[#D8D0C5] space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span class="text-xs text-[#6E6259]"
+              >確認正面題字、相片與背面訪談內容無誤後，請按下右側按鈕直接送出。</span
+            >
+            <button
+              type="submit"
+              [disabled]="isSubmitting()"
+              class="inline-flex items-center justify-center gap-2 px-7 py-3 rounded-xl bg-[#A63A2B] hover:bg-[#872D21] disabled:opacity-60 text-[#FAF8F5] font-serif font-bold text-sm shadow-md transition-all cursor-pointer shrink-0"
+            >
+              <app-icon name="send" cls="w-4 h-4" />
+              <span>{{ isSubmitting() ? '送出處理中...' : '確認送出' }}</span>
+            </button>
+          </div>
+
+          @if (submittedEntry(); as entry) {
+            <div
+              class="p-4 rounded-xl bg-[#E6EFE8] border border-[#2F5738]/40 flex items-start justify-between gap-3 shadow-xs"
+            >
+              <div class="space-y-1">
+                <div class="flex items-center gap-2 text-sm font-serif font-bold text-[#2F5738]">
+                  <app-icon name="check-circle2" cls="w-4 h-4 shrink-0" />
+                  <span>
+                    {{
+                      entry.cloudSynced
+                        ? '已確認送出！作品已同步寫入老師的 Google 試算表後台'
+                        : '已確認送出！作品已成功傳送至「一頁府城・百年書籤」協作後台'
+                    }}
+                  </span>
+                </div>
+                <p class="text-xs text-[#262623]/80 pl-6">
+                  投稿人：{{ entry.studentInfo }} ｜ 地標：{{ entry.landmarkLabel }}
+                </p>
+              </div>
+              <button
+                type="button"
+                (click)="submittedEntry.set(null)"
+                title="關閉提示卡片"
+                class="p-1.5 rounded-lg text-[#2F5738]/70 hover:bg-[#2F5738]/10 cursor-pointer shrink-0"
+              >
+                <app-icon name="x" cls="w-4 h-4" />
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </form>
+
+    <!-- 右欄：棉紙信箋即時翻轉打樣區 -->
+    <div class="lg:col-span-5 lg:sticky lg:top-24 flex flex-col items-center">
+      <div
+        class="w-full bg-[#F4F0E8] border border-[#D8D0C5] rounded-2xl p-5 shadow-sm flex flex-col items-center"
+      >
+        <div
+          class="w-full flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-[#D8D0C5]"
+        >
+          <div>
+            <span class="text-xs font-serif text-[#A63A2B] font-semibold">棉紙信箋即時預覽</span>
+            <h3 class="font-serif font-bold text-sm text-[#262623] mt-0.5">
+              {{
+                previewSide() === 'A'
+                  ? '書籤正面・直書題字與風景留影'
+                  : '書籤背面・家族尺素與親筆寄語'
+              }}
+            </h3>
+          </div>
+          <button
+            type="button"
+            (click)="previewSide.set(previewSide() === 'A' ? 'B' : 'A')"
+            class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#262623] hover:bg-[#3B3B37] text-[#FAF8F5] text-xs font-medium shadow-xs transition-all cursor-pointer"
+          >
+            <app-icon name="rotate-cw" cls="w-3.5 h-3.5" />
+            <span>翻轉正面 ⇄ 背面</span>
+          </button>
+        </div>
+
+        @if (previewSide() === 'B') {
+          <div
+            class="w-full mb-4 flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#FAF8F5] border border-[#D8D0C5] text-xs"
+          >
+            <span class="text-[#5C524B]">{{
+              uprightAssistB() ? '檢視角度：橫向正立閱讀' : '檢視角度：書籤直立方向'
+            }}</span>
+            <div class="inline-flex rounded-lg bg-[#F4F0E8] p-0.5 border border-[#D8D0C5]">
+              <button
+                type="button"
+                (click)="uprightAssistB.set(true)"
+                class="px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer"
+                [class]="
+                  uprightAssistB()
+                    ? 'bg-[#A63A2B] text-[#FAF8F5]'
+                    : 'text-[#5C524B] hover:text-[#262623]'
+                "
+              >
+                橫向正立閱讀
+              </button>
+              <button
+                type="button"
+                (click)="uprightAssistB.set(false)"
+                class="px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer"
+                [class]="
+                  !uprightAssistB()
+                    ? 'bg-[#A63A2B] text-[#FAF8F5]'
+                    : 'text-[#5C524B] hover:text-[#262623]'
+                "
+              >
+                書籤直立方向
+              </button>
+            </div>
+          </div>
+        }
+
+        <div class="w-full overflow-x-auto flex justify-center py-2">
+          <div class="shadow-xl border border-[#C7BCB0] bg-[#FAF8F5] transition-all duration-300">
+            @if (previewSide() === 'A') {
+              <app-bookmark-side-a [bookmark]="previewBookmark()" mode="preview" />
+            } @else {
+              <app-bookmark-side-b
+                [bookmark]="previewBookmark()"
+                mode="preview"
+                [uprightAssist]="uprightAssistB()"
+              />
+            }
+          </div>
+        </div>
+
+        <div class="w-full mt-4 pt-3.5 border-t border-[#D8D0C5] space-y-2.5">
+          <div
+            role="group"
+            aria-label="選擇書籤預覽面"
+            class="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#FAF8F5] border border-[#D8D0C5]"
+          >
+            <button
+              type="button"
+              (click)="previewSide.set('A')"
+              [attr.aria-pressed]="previewSide() === 'A'"
+              class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-serif font-bold transition-all cursor-pointer"
+              [class]="
+                previewSide() === 'A'
+                  ? 'bg-[#A63A2B] text-[#FAF8F5] shadow-xs'
+                  : 'text-[#5C524B] hover:text-[#262623] hover:bg-[#F4F0E8]/70'
+              "
+            >
+              <span>正面預覽</span>
+            </button>
+            <button
+              type="button"
+              (click)="previewSide.set('B')"
+              [attr.aria-pressed]="previewSide() === 'B'"
+              class="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-serif font-bold transition-all cursor-pointer"
+              [class]="
+                previewSide() === 'B'
+                  ? 'bg-[#A63A2B] text-[#FAF8F5] shadow-xs'
+                  : 'text-[#5C524B] hover:text-[#262623] hover:bg-[#F4F0E8]/70'
+              "
+            >
+              <span>背面預覽</span>
+            </button>
+          </div>
+
+          <div class="px-3 py-2 rounded-xl bg-[#FAF8F5]/90 border border-[#D8D0C5] text-center">
+            <p class="text-xs font-serif font-semibold text-[#262623] tracking-wide">
+              {{
+                previewSide() === 'A'
+                  ? '目前檢視：正面（傳統直書＋風景畫框＋迷你臺灣位置）'
+                  : '目前檢視：背面（橫向棉紙信箋＋家人寄語單行手寫底線）'
+              }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>

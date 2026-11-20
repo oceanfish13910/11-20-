@@ -1,0 +1,710 @@
+@if (editingBookmark(); as editing) {
+  <div class="no-print">
+    <app-teacher-edit-modal
+      [bookmark]="editing"
+      [allBookmarks]="store.bookmarks()"
+      (closed)="editingBookmark.set(null)"
+      (saved)="onSaveEdited($event)"
+    />
+  </div>
+}
+
+<main
+  class="no-print cotton-paper-bg max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6"
+>
+  <!-- 統計摘要與子分頁 -->
+  <div class="bg-[#F4F0E8] border border-[#D8D0C5] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <span
+            class="px-2.5 py-0.5 rounded-full bg-[#A63A2B] text-[#FAF8F5] text-xs font-serif font-bold"
+            >教師工作站</span
+          >
+          <h2 class="font-serif font-bold text-lg text-[#262623]">
+            校慶書籤審閱修正・A4 雙面四連排輸出・Google 試算表連動
+          </h2>
+        </div>
+        <p class="text-xs text-[#5C524B] mt-1">
+          目前共收錄
+          <strong class="text-[#262623]">{{ store.stats().total }}</strong> 枚書籤（臺南府城及各區
+          {{ store.stats().tainanCount }} 處、全臺原鄉 {{ store.stats().outerCount }} 處），已勾選
+          <strong class="text-[#A63A2B]">{{ store.selectedPrintBookmarks().length }}</strong> 枚進入
+          A4 輸出佇列。
+        </p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        @if (store.gasUrl()) {
+          <button
+            type="button"
+            (click)="store.pullFromGoogleSheets(store.gasUrl(), false)"
+            [disabled]="store.isSyncingCloud()"
+            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2F5738] hover:bg-[#23422A] text-[#FAF8F5] text-xs font-serif font-semibold shadow-xs cursor-pointer"
+          >
+            <app-icon
+              name="refresh-cw"
+              [cls]="'w-3.5 h-3.5 ' + (store.isSyncingCloud() ? 'animate-spin' : '')"
+            />
+            <span>{{ store.isSyncingCloud() ? '同步中...' : '立即從試算表拉取最新投稿' }}</span>
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-[#D8D0C5]">
+      <button
+        type="button"
+        (click)="tab.set('manage')"
+        class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-xs sm:text-sm font-serif font-bold transition-all cursor-pointer"
+        [class]="
+          tab() === 'manage'
+            ? 'bg-[#A63A2B] text-[#FAF8F5] border-[#A63A2B] shadow-sm'
+            : 'bg-[#FAF8F5] text-[#5C524B] border-[#D8D0C5] hover:border-[#A63A2B]/50'
+        "
+      >
+        <app-icon name="layers" cls="w-4 h-4" />
+        <span>1. 作品總覽與修正編輯（{{ store.bookmarks().length }}）</span>
+      </button>
+      <button
+        type="button"
+        (click)="tab.set('print')"
+        class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-xs sm:text-sm font-serif font-bold transition-all cursor-pointer"
+        [class]="
+          tab() === 'print'
+            ? 'bg-[#A63A2B] text-[#FAF8F5] border-[#A63A2B] shadow-sm'
+            : 'bg-[#FAF8F5] text-[#5C524B] border-[#D8D0C5] hover:border-[#A63A2B]/50'
+        "
+      >
+        <app-icon name="printer" cls="w-4 h-4" />
+        <span
+          >2. A4 雙面四連排輸出與 200 DPI PDF（已選
+          {{ store.selectedPrintBookmarks().length }}）</span
+        >
+      </button>
+      <button
+        type="button"
+        (click)="tab.set('google-sync')"
+        class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-xs sm:text-sm font-serif font-bold transition-all cursor-pointer"
+        [class]="
+          tab() === 'google-sync'
+            ? 'bg-[#A63A2B] text-[#FAF8F5] border-[#A63A2B] shadow-sm'
+            : 'bg-[#FAF8F5] text-[#5C524B] border-[#D8D0C5] hover:border-[#A63A2B]/50'
+        "
+      >
+        <app-icon name="cloud" cls="w-4 h-4" />
+        <span>3. Google 試算表與協作平台連動設定</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ============ 分頁 1：作品總覽與修正編輯 ============ -->
+  @if (tab() === 'manage') {
+    <div class="space-y-4">
+      <div class="bg-[#FAF8F5] border border-[#D8D0C5] rounded-2xl p-4 shadow-xs space-y-3">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div class="relative flex-1 max-w-md">
+            <app-icon
+              name="search"
+              cls="w-4 h-4 text-[#8A7F76] absolute left-3 top-1/2 -translate-y-1/2"
+            />
+            <input
+              type="text"
+              aria-label="搜尋作品"
+              [value]="searchQuery()"
+              (input)="searchQuery.set(val($event))"
+              placeholder="搜尋班級姓名、地標名稱、訪談對象或內文..."
+              class="w-full pl-9 pr-3 py-2 rounded-xl border border-[#D8D0C5] bg-[#FFFDF9] text-xs sm:text-sm focus:outline-none focus:border-[#A63A2B]"
+            />
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              (click)="selectAllFiltered()"
+              class="px-3 py-1.5 rounded-lg border border-[#D8D0C5] bg-[#F4F0E8] hover:bg-[#EAE1D2] text-xs font-serif font-semibold text-[#262623] cursor-pointer"
+            >
+              全選篩選結果加入輸出（{{ filteredBookmarks().length }}）
+            </button>
+            <button
+              type="button"
+              (click)="store.selectedPrintIds.set([])"
+              class="px-3 py-1.5 rounded-lg border border-[#D8D0C5] bg-[#FAF8F5] hover:bg-[#EAE1D2] text-xs font-serif text-[#6E6259] cursor-pointer"
+            >
+              清空輸出選取
+            </button>
+            @if (store.selectedPrintBookmarks().length > 0) {
+              <button
+                type="button"
+                (click)="tab.set('print')"
+                class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#A63A2B] text-[#FAF8F5] text-xs font-serif font-bold shadow-xs cursor-pointer"
+              >
+                <app-icon name="printer" cls="w-3.5 h-3.5" />
+                <span>前往 A4 輸出工作區（{{ store.selectedPrintBookmarks().length }}）</span>
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1.5 pt-1">
+          <button
+            type="button"
+            (click)="filterZone.set('ALL')"
+            class="px-2.5 py-1 rounded-lg text-xs font-serif font-semibold cursor-pointer"
+            [class]="
+              filterZone() === 'ALL'
+                ? 'bg-[#262623] text-[#FAF8F5]'
+                : 'bg-[#F4F0E8] text-[#5C524B] hover:text-[#262623]'
+            "
+          >
+            全部分區（{{ store.bookmarks().length }}）
+          </button>
+          @for (item of zoneCounts(); track item.zone.id) {
+            <button
+              type="button"
+              (click)="filterZone.set(item.zone.name)"
+              class="px-2.5 py-1 rounded-lg text-xs font-serif font-semibold cursor-pointer"
+              [class]="
+                filterZone() === item.zone.name
+                  ? 'bg-[#A63A2B] text-[#FAF8F5]'
+                  : 'bg-[#F4F0E8] text-[#5C524B] hover:text-[#262623]'
+              "
+            >
+              {{ item.zone.shortName }}（{{ item.count }}）
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (filteredBookmarks().length === 0) {
+        <div class="bg-[#FAF8F5] border border-[#D8D0C5] rounded-2xl p-10 text-center space-y-2">
+          <p class="font-serif text-base font-bold text-[#5C524B]">查無符合條件的書籤投稿資料</p>
+          <p class="text-xs text-[#8A7F76]">請調整搜尋關鍵字或切換地理分區篩選條件。</p>
+        </div>
+      } @else {
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          @for (bm of filteredBookmarks(); track bm.id) {
+            @let checked = isSelected(bm.id);
+            @let zone = zoneMeta(bm);
+            @let activeThumb = thumb(bm);
+            <div
+              class="rounded-2xl border p-4 transition-all flex flex-col justify-between gap-3 bg-[#FAF8F5]"
+              [class]="
+                checked
+                  ? 'border-[#A63A2B] ring-2 ring-[#A63A2B]/15 shadow-sm'
+                  : 'border-[#D8D0C5] hover:border-[#A63A2B]/45'
+              "
+            >
+              <div class="space-y-2.5">
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <div class="font-serif font-bold text-sm text-[#262623]">
+                      {{ bm.studentInfo }}
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                      <span
+                        class="px-2 py-0.5 rounded text-[11px] font-serif font-bold border"
+                        [style.background-color]="zone?.badgeBg || '#F4F0E8'"
+                        [style.color]="zone?.badgeText || '#A63A2B'"
+                        [style.border-color]="zone?.badgeBorder || '#D8D0C5'"
+                        >{{ bm.landmarkLabel || bm.locationZone }}</span
+                      >
+                      @if (bm.interviewee) {
+                        <span class="text-[11px] text-[#6E6259] font-serif"
+                          >訪【{{ bm.interviewee }}】</span
+                        >
+                      }
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    (click)="toggleSelection(bm.id)"
+                    class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-serif font-semibold cursor-pointer shrink-0"
+                    [class]="
+                      checked
+                        ? 'bg-[#A63A2B] text-[#FAF8F5] border-[#A63A2B]'
+                        : 'bg-[#F4F0E8] text-[#5C524B] border-[#D8D0C5] hover:border-[#A63A2B]'
+                    "
+                  >
+                    <app-icon [name]="checked ? 'check-square' : 'square'" cls="w-3.5 h-3.5" />
+                    <span>{{ checked ? '已選輸出' : '選入輸出' }}</span>
+                  </button>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-[#F4F0E8]/75 border border-[#EAE2D3] space-y-1.5">
+                  <div class="text-[11px] font-serif font-bold text-[#A63A2B]">
+                    正面直書（{{ charCount(bm.sideAText) }} 字）：
+                  </div>
+                  <p class="font-serif text-xs text-[#262623] line-clamp-2 leading-relaxed">
+                    「{{ bm.sideAText }}」
+                  </p>
+                </div>
+
+                <div class="flex items-start gap-2.5">
+                  @if (activeThumb) {
+                    <img
+                      [src]="activeThumb"
+                      [alt]="bm.landmarkLabel"
+                      class="w-16 h-12 rounded-lg object-cover border border-[#D8D0C5] shrink-0"
+                    />
+                  } @else {
+                    <div
+                      class="w-16 h-12 rounded-lg border border-dashed border-[#C7BEB0] bg-[#FFFDF9] flex items-center justify-center text-[10px] font-serif text-[#9E9388] shrink-0 text-center leading-tight"
+                    >
+                      手繪<br />留白
+                    </div>
+                  }
+                  <p class="font-serif text-[11px] text-[#5C524B] line-clamp-3 leading-relaxed">
+                    {{ bm.sideBText || '（尚未填寫背面家族訪談故事）' }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="pt-2.5 border-t border-[#EAE2D3] flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  (click)="editingBookmark.set(bm)"
+                  class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#262623] hover:bg-[#3B3B37] text-[#FAF8F5] text-xs font-serif font-semibold cursor-pointer"
+                >
+                  <app-icon name="edit3" cls="w-3.5 h-3.5 text-[#E5C89B]" />
+                  <span>修正編輯</span>
+                </button>
+
+                @if (confirmDeleteId() === bm.id) {
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      (click)="onDelete(bm.id)"
+                      class="px-2.5 py-1 rounded bg-[#A63A2B] text-[#FAF8F5] text-[11px] font-bold cursor-pointer"
+                    >
+                      確認刪除
+                    </button>
+                    <button
+                      type="button"
+                      (click)="confirmDeleteId.set(null)"
+                      class="px-2 py-1 rounded bg-[#EAE1D2] text-[#5C524B] text-[11px] cursor-pointer"
+                    >
+                      取消
+                    </button>
+                  </div>
+                } @else {
+                  <button
+                    type="button"
+                    (click)="confirmDeleteId.set(bm.id)"
+                    class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[#8A7F76] hover:text-[#A63A2B] hover:bg-[#F7ECEA] cursor-pointer"
+                  >
+                    <app-icon name="trash2" cls="w-3.5 h-3.5" />
+                    <span>刪除</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ============ 分頁 2：A4 雙面四連排輸出 ============ -->
+  @if (tab() === 'print') {
+    <div class="space-y-5">
+      <div class="bg-[#FAF8F5] border border-[#D8D0C5] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+        <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="font-serif font-bold text-base text-[#262623]">
+                標準 A4 橫式雙面四連排輸出（297mm × 210mm｜每枚 74.25mm × 210mm）
+              </h3>
+              <span
+                class="px-2 py-0.5 rounded bg-[#E6EFE8] border border-[#2F5738]/30 text-[#2F5738] font-serif text-[11px] font-bold"
+                >200 DPI 精準對位雙面 PDF</span
+              >
+            </div>
+            <p class="text-xs text-[#5C524B] leading-relaxed">
+              奇數頁為<strong>正面（槽位 1 → 2 → 3 → 4）</strong>，偶數頁自動鏡像為<strong
+                >背面（槽位 4 → 3 → 2 → 1）</strong
+              >。影印機請設定「A4 橫向、無邊界／100%
+              實際大小、雙面列印（短邊翻轉）」即可沿裁切線一刀四分。
+            </p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              (click)="exportPdf(false)"
+              [disabled]="isGeneratingPdf() || store.selectedPrintBookmarks().length === 0"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#A63A2B] hover:bg-[#872D21] disabled:opacity-55 text-[#FAF8F5] text-xs font-serif font-bold shadow-sm cursor-pointer"
+            >
+              <app-icon
+                name="download"
+                [cls]="'w-3.5 h-3.5 ' + (isGeneratingPdf() ? 'animate-bounce' : '')"
+              />
+              <span>{{
+                isGeneratingPdf()
+                  ? '正在渲染 200 DPI 雙面 PDF...'
+                  : '下載 200 DPI 雙面 PDF（' + store.a4PrintPages().length * 2 + ' 頁）'
+              }}</span>
+            </button>
+            <button
+              type="button"
+              (click)="exportPdf(true)"
+              [disabled]="isGeneratingPdf() || store.selectedPrintBookmarks().length === 0"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2F5738] hover:bg-[#23422A] disabled:opacity-55 text-[#FAF8F5] text-xs font-serif font-semibold shadow-xs cursor-pointer"
+            >
+              <app-icon name="external-link" cls="w-3.5 h-3.5" />
+              <span>新分頁開啟 PDF 預覽</span>
+            </button>
+            <button
+              type="button"
+              (click)="triggerBrowserPrint('front')"
+              class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#D8D0C5] bg-[#FAF8F5] hover:bg-[#F4F0E8] text-[#262623] text-xs font-serif font-semibold cursor-pointer"
+            >
+              <app-icon name="printer" cls="w-3.5 h-3.5 text-[#A63A2B]" />
+              <span>瀏覽器單面列印</span>
+            </button>
+          </div>
+        </div>
+
+        @if (lastPdf(); as pdf) {
+          <div
+            class="p-3 rounded-xl bg-[#E6EFE8]/85 border border-[#2F5738]/35 flex flex-wrap items-center justify-between gap-3"
+          >
+            <div class="flex items-center gap-2 text-xs text-[#262623]">
+              <app-icon name="file-text" cls="w-4 h-4 text-[#2F5738] shrink-0" />
+              <span>
+                已生成：<strong>{{ pdf.fileName }}</strong
+                >（共 {{ pdf.setCount }} 組／{{ pdf.totalPages }} 頁 A4 雙面，2339 × 1654 px &#64;
+                200 DPI，檔案大小 {{ pdf.sizeMB }} MB）
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <a
+                [href]="pdf.blobUrl"
+                [attr.download]="pdf.fileName"
+                class="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#2F5738] text-[#FAF8F5] text-xs font-serif font-semibold"
+              >
+                <app-icon name="download" cls="w-3 h-3" />
+                <span>再次下載</span>
+              </a>
+              <a
+                [href]="pdf.blobUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#FAF8F5] border border-[#2F5738]/40 text-[#2F5738] text-xs font-serif font-semibold"
+              >
+                <app-icon name="external-link" cls="w-3 h-3" />
+                <span>開啟新分頁預覽</span>
+              </a>
+            </div>
+          </div>
+        }
+
+        <div
+          class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#EAE2D3]"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="inline-flex rounded-xl bg-[#F4F0E8] p-1 border border-[#D8D0C5]">
+              <button
+                type="button"
+                (click)="store.printPreviewSide.set('front')"
+                class="px-3 py-1.5 rounded-lg text-xs font-serif font-bold cursor-pointer"
+                [class]="
+                  store.printPreviewSide() === 'front'
+                    ? 'bg-[#A63A2B] text-[#FAF8F5]'
+                    : 'text-[#5C524B]'
+                "
+              >
+                正面拼版預覽〔1 → 2 → 3 → 4〕
+              </button>
+              <button
+                type="button"
+                (click)="store.printPreviewSide.set('back')"
+                class="px-3 py-1.5 rounded-lg text-xs font-serif font-bold cursor-pointer"
+                [class]="
+                  store.printPreviewSide() === 'back'
+                    ? 'bg-[#262623] text-[#FAF8F5]'
+                    : 'text-[#5C524B]'
+                "
+              >
+                背面短邊翻轉鏡像預覽〔4 → 3 → 2 → 1〕
+              </button>
+            </div>
+
+            <button
+              type="button"
+              (click)="sortByNearest()"
+              [disabled]="store.selectedPrintBookmarks().length <= 1"
+              title="由竹園岡・臺南一中出發，將地理位置相鄰的作品自動編排於同一張 A4"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F7ECEA] hover:bg-[#EFE0DC] disabled:opacity-50 border border-[#A63A2B]/35 text-[#A63A2B] text-xs font-serif font-semibold cursor-pointer"
+            >
+              <app-icon name="sparkles" cls="w-3.5 h-3.5" />
+              <span>依地理位置最鄰近同頁排序</span>
+            </button>
+
+            <label
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F4F0E8] border border-[#D8D0C5] text-xs font-serif text-[#262623] cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                [checked]="store.showCropMarks()"
+                (change)="store.showCropMarks.set($any($event.target).checked)"
+                class="accent-[#A63A2B]"
+              />
+              <span>顯示裁切對位十字線與虛線</span>
+            </label>
+          </div>
+
+          @if (store.a4PrintPages().length > 1) {
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs text-[#6E6259] font-serif">A4 組別：</span>
+              @for (p of store.a4PrintPages(); track $index) {
+                <button
+                  type="button"
+                  (click)="activePrintPageIndex.set($index)"
+                  class="px-2.5 py-1 rounded-lg text-xs font-serif font-bold cursor-pointer"
+                  [class]="
+                    activePrintPageIndex() === $index
+                      ? 'bg-[#A63A2B] text-[#FAF8F5]'
+                      : 'bg-[#F4F0E8] text-[#5C524B]'
+                  "
+                >
+                  第 {{ $index + 1 }} 組（P.{{ $index * 2 + 1 }}-{{ $index * 2 + 2 }}）
+                </button>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          @for (slot of slotInfo(); track $index) {
+            <div
+              class="px-3 py-2 rounded-xl bg-[#F4F0E8]/80 border border-[#D8D0C5] flex items-center justify-between gap-2 text-xs"
+            >
+              <span class="font-serif font-bold text-[#A63A2B] shrink-0">
+                {{
+                  store.printPreviewSide() === 'front'
+                    ? '正面第 ' + (slot.slotIdx + 1) + ' 格'
+                    : '背面鏡像（對應正面第 ' + (slot.slotIdx + 1) + ' 格）'
+                }}
+              </span>
+              <span class="font-serif text-[#262623] truncate">{{
+                slot.bm ? slot.bm.studentInfo : '（留白空槽）'
+              }}</span>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div
+        class="bg-[#E5DEC9]/65 border border-[#C7BCB0] rounded-2xl p-4 sm:p-6 overflow-x-auto flex flex-col items-center"
+      >
+        <div
+          class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#262623] text-[#FAF8F5] text-xs font-serif mb-4"
+        >
+          <app-icon name="arrow-left-right" cls="w-3.5 h-3.5 text-[#E5C89B]" />
+          <span>
+            A4 橫式 1:1 實際尺寸拼版檢視（第 {{ activePrintPageIndex() + 1 }} /
+            {{ store.a4PrintPages().length }} 組・{{
+              store.printPreviewSide() === 'front'
+                ? '奇數頁 P.' + (activePrintPageIndex() * 2 + 1) + ' 正面'
+                : '偶數頁 P.' + (activePrintPageIndex() * 2 + 2) + ' 背面短邊翻轉鏡像'
+            }}）
+          </span>
+        </div>
+        <div class="inline-block">
+          <app-a4-imposition-sheet
+            [slots]="currentPage()"
+            [side]="store.printPreviewSide()"
+            [showCropMarks]="store.showCropMarks()"
+            [isPrintRender]="false"
+          />
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ============ 分頁 3：Google 試算表與協作平台連動 ============ -->
+  @if (tab() === 'google-sync') {
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div class="lg:col-span-6 space-y-5">
+        <form
+          (submit)="onSaveGasUrl($event)"
+          class="bg-[#FAF8F5] border border-[#D8D0C5] rounded-2xl p-5 shadow-xs space-y-4"
+        >
+          <div class="flex items-center gap-2 border-b border-[#EAE2D3] pb-2.5">
+            <app-icon name="cloud" cls="w-5 h-5 text-[#2F5738]" />
+            <h3 class="font-serif font-bold text-base text-[#262623]">
+              步驟一：連結教師 Google 試算表資料庫
+            </h3>
+          </div>
+          <p class="text-xs text-[#5C524B] leading-relaxed">
+            將右側提供的 Google Apps Script 程式碼貼入您的 Google
+            試算表並部署為「網頁應用程式」後，把產生的
+            <code class="px-1.5 py-0.5 rounded bg-[#F4F0E8] text-[#A63A2B]">.../exec</code>
+            網址貼入下方即可實現跨裝置、全班同學即時投稿自動彙整。
+          </p>
+          <div>
+            <label for="gas-url" class="block text-xs font-semibold text-[#262623] mb-1.5"
+              >Google Apps Script 網頁應用程式網址（Web App URL）</label
+            >
+            <input
+              id="gas-url"
+              type="url"
+              [value]="gasUrlInput()"
+              (input)="gasUrlInput.set(val($event))"
+              placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-[#D8D0C5] bg-[#FFFDF9] text-xs font-mono focus:outline-none focus:border-[#A63A2B]"
+            />
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="submit"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#A63A2B] hover:bg-[#872D21] text-[#FAF8F5] text-xs font-serif font-bold cursor-pointer"
+            >
+              <app-icon name="check" cls="w-3.5 h-3.5" />
+              <span>儲存連線網址</span>
+            </button>
+            @if (store.gasUrl()) {
+              <button
+                type="button"
+                (click)="store.pullFromGoogleSheets(store.gasUrl(), false)"
+                [disabled]="store.isSyncingCloud()"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2F5738] text-[#FAF8F5] text-xs font-serif font-semibold cursor-pointer"
+              >
+                <app-icon
+                  name="refresh-cw"
+                  [cls]="'w-3.5 h-3.5 ' + (store.isSyncingCloud() ? 'animate-spin' : '')"
+                />
+                <span>測試拉取試算表資料</span>
+              </button>
+              <button
+                type="button"
+                (click)="pushAllToSheets()"
+                [disabled]="store.isSyncingCloud()"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#D8D0C5] bg-[#F4F0E8] text-[#262623] text-xs font-serif font-semibold cursor-pointer"
+              >
+                <span>將本機作品備份寫入試算表</span>
+              </button>
+            }
+          </div>
+          @if (store.lastSyncTime()) {
+            <p class="text-[11px] text-[#2F5738] font-medium">
+              ✓ 最近一次雲端同步時間：{{ store.lastSyncTime() }}
+            </p>
+          }
+        </form>
+
+        <div class="bg-[#FAF8F5] border border-[#D8D0C5] rounded-2xl p-5 shadow-xs space-y-4">
+          <div class="flex items-center gap-2 border-b border-[#EAE2D3] pb-2.5">
+            <app-icon name="external-link" cls="w-5 h-5 text-[#A63A2B]" />
+            <h3 class="font-serif font-bold text-base text-[#262623]">
+              步驟二：Google 協作平台（Google Sites）雙頁面內嵌網址
+            </h3>
+          </div>
+          <p class="text-xs text-[#5C524B] leading-relaxed">
+            在您的 Google 協作平台中建立兩個頁面，分別使用「插入 → 內嵌 →
+            透過網址」貼上以下對應連結（網址已自動夾帶您的試算表連線參數）：
+          </p>
+          <div class="space-y-3">
+            <div class="p-3 rounded-xl bg-[#F4F0E8] border border-[#D8D0C5] space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-serif font-bold text-[#2F5738]"
+                  >① 學生公開投稿頁專用網址（隱藏後台入口，純淨創作）</span
+                >
+                <button
+                  type="button"
+                  (click)="copy(embedUrls().studentUrl, '學生公開投稿頁內嵌網址')"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#262623] text-[#FAF8F5] text-[11px] cursor-pointer"
+                >
+                  <app-icon name="copy" cls="w-3 h-3" />
+                  <span>複製網址</span>
+                </button>
+              </div>
+              <div
+                class="text-[11px] font-mono text-[#5C524B] break-all bg-[#FFFDF9] p-2 rounded border border-[#D8D0C5]"
+              >
+                {{ embedUrls().studentUrl }}
+              </div>
+            </div>
+            <div class="p-3 rounded-xl bg-[#F4F0E8] border border-[#D8D0C5] space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-serif font-bold text-[#A63A2B]"
+                  >② 教師管理與 A4 列印頁專用網址（建議設為教師權限可見）</span
+                >
+                <button
+                  type="button"
+                  (click)="copy(embedUrls().teacherUrl, '教師管理後台內嵌網址')"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#A63A2B] text-[#FAF8F5] text-[11px] cursor-pointer"
+                >
+                  <app-icon name="copy" cls="w-3 h-3" />
+                  <span>複製網址</span>
+                </button>
+              </div>
+              <div
+                class="text-[11px] font-mono text-[#5C524B] break-all bg-[#FFFDF9] p-2 rounded border border-[#D8D0C5]"
+              >
+                {{ embedUrls().teacherUrl }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-[#FAF8F5] border border-[#D8D0C5] rounded-2xl p-5 shadow-xs space-y-3">
+          <div class="flex items-center gap-2">
+            <app-icon name="shield-check" cls="w-4 h-4 text-[#A63A2B]" />
+            <h4 class="font-serif font-bold text-sm text-[#262623]">教師後台驗證碼設定</h4>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              type="text"
+              aria-label="教師後台驗證碼"
+              [value]="passcodeDraft()"
+              (input)="passcodeDraft.set(val($event))"
+              placeholder="預設 105（留空則免密碼）"
+              class="px-3 py-1.5 rounded-lg border border-[#D8D0C5] bg-[#FFFDF9] text-xs font-mono"
+            />
+            <button
+              type="button"
+              (click)="savePasscode()"
+              class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#262623] text-[#FAF8F5] text-xs font-serif cursor-pointer"
+            >
+              <app-icon [name]="passcodeDraft().trim() ? 'lock' : 'unlock'" cls="w-3 h-3" />
+              <span>更新驗證碼</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="lg:col-span-6 bg-[#FAF8F5] border border-[#D8D0C5] rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-3"
+      >
+        <div
+          class="flex flex-wrap items-center justify-between gap-2 border-b border-[#EAE2D3] pb-2.5"
+        >
+          <div class="flex items-center gap-2">
+            <app-icon name="settings" cls="w-5 h-5 text-[#A63A2B]" />
+            <h3 class="font-serif font-bold text-base text-[#262623]">
+              Google Apps Script 後端程式碼（Code.gs）
+            </h3>
+          </div>
+          <button
+            type="button"
+            (click)="copy(gasCode, 'Google Apps Script (Code.gs) 完整程式碼')"
+            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#A63A2B] hover:bg-[#872D21] text-[#FAF8F5] text-xs font-serif font-bold shadow-xs cursor-pointer"
+          >
+            <app-icon name="copy" cls="w-3.5 h-3.5" />
+            <span>一鍵複製完整程式碼</span>
+          </button>
+        </div>
+        <p class="text-xs text-[#5C524B] leading-relaxed">
+          請開啟您的 Google 試算表 → 點選上方選單<strong>「擴充功能」→「Apps Script」</strong>→
+          全選覆蓋貼上以下程式碼並部署為「網頁應用程式（執行身分：我、誰可以存取：所有人）」。
+        </p>
+        <pre
+          class="flex-1 max-h-[540px] overflow-auto p-3.5 rounded-xl bg-[#262623] text-[#FAF8F5] text-[11px] font-mono leading-relaxed select-all"
+        ><code>{{ gasCode }}</code></pre>
+      </div>
+    </div>
+  }
+</main>
