@@ -15,7 +15,7 @@ import {
   GOOGLE_APPS_SCRIPT_CODE,
   postToGoogleAppsScript,
   resolveActiveBookmarkImage,
-  shrinkDataUrlForGoogleSheets,
+  toSheetBookmark,
 } from '../core/gas';
 import { generateStandardA4DoubleSidedPdf, sortBookmarksByNearestNeighbor } from '../core/pdf';
 import { IconComponent } from '../shared/icon';
@@ -164,16 +164,18 @@ export class TeacherDashboardComponent {
   }
 
   protected async onSaveEdited(updated: Bookmark): Promise<void> {
-    this.store.bookmarks.update((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+    const pending: Bookmark = { ...updated, cloudSynced: false };
+    this.store.bookmarks.update((prev) => prev.map((b) => (b.id === updated.id ? pending : b)));
     this.editingBookmark.set(null);
     this.store.showToast(`已儲存「${updated.studentInfo}」的修正內容！`);
-    const url = this.store.gasUrl();
-    if (url && url.trim()) {
-      const sheetSafeImg = await shrinkDataUrlForGoogleSheets(updated.imageDataUrl);
-      await postToGoogleAppsScript(url, {
-        action: 'upsert',
-        bookmark: { ...updated, imageDataUrl: sheetSafeImg },
-      });
+    if (this.store.gasUrl().trim()) {
+      const res = await this.store.uploadBookmark(pending);
+      if (!res.ok) {
+        this.store.showToast(
+          `「${updated.studentInfo}」的修正尚未寫入試算表，可按上方「補送未同步作品」重試。`,
+          'error',
+        );
+      }
     }
   }
 
@@ -184,7 +186,10 @@ export class TeacherDashboardComponent {
     this.store.showToast('已刪除該筆書籤作品。');
     const url = this.store.gasUrl();
     if (url && url.trim()) {
-      await postToGoogleAppsScript(url, { action: 'delete', id });
+      const res = await postToGoogleAppsScript(url, { action: 'delete', id });
+      if (!res.ok) {
+        this.store.showToast('試算表中的資料刪除失敗，請到 Google 試算表手動刪除該列。', 'error');
+      }
     }
   }
 
@@ -280,15 +285,21 @@ export class TeacherDashboardComponent {
     try {
       const prepared: Bookmark[] = [];
       for (const bm of this.store.bookmarks()) {
-        const safeImg = await shrinkDataUrlForGoogleSheets(resolveActiveBookmarkImage(bm));
-        prepared.push({ ...bm, imageDataUrl: safeImg });
+        prepared.push(await toSheetBookmark(bm));
       }
       const res = await postToGoogleAppsScript(url, { action: 'syncAll', bookmarks: prepared });
       if (res.ok) {
+        const ids = new Set(prepared.map((b) => b.id));
+        this.store.bookmarks.update((prev) =>
+          prev.map((b) => (ids.has(b.id) ? { ...b, cloudSynced: true } : b)),
+        );
         this.store.lastSyncTime.set(new Date().toLocaleTimeString('zh-TW', { hour12: false }));
         this.store.showToast(`已將目前 ${prepared.length} 筆作品全部備份推送至 Google 試算表！`);
       } else {
-        this.store.showToast('推送至試算表時發生錯誤，請檢查 Apps Script 部署權限。', 'error');
+        this.store.showToast(
+          `推送至試算表時發生錯誤：${res.error || '請檢查 Apps Script 部署權限'}`,
+          'error',
+        );
       }
     } finally {
       this.store.isSyncingCloud.set(false);

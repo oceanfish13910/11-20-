@@ -10,11 +10,7 @@ import {
 import type { Bookmark, MapCoords } from '../core/models';
 import { AppStore } from '../core/app-store';
 import { INTERVIEWEE_TITLES, LOCATION_ZONES, TNFSH_ANCHOR } from '../core/constants';
-import {
-  postToGoogleAppsScript,
-  resolveActiveBookmarkImage,
-  shrinkDataUrlForGoogleSheets,
-} from '../core/gas';
+import { resolveActiveBookmarkImage } from '../core/gas';
 import {
   compressImageFile,
   createSampleTainanArchitectureDataUrl,
@@ -111,7 +107,10 @@ export class StudentWorkshopComponent {
   protected readonly uprightAssistB = signal(true);
   protected readonly isSubmitting = signal(false);
   protected readonly isProcessingFilters = signal(false);
-  protected readonly submittedEntry = signal<(Bookmark & { cloudSynced: boolean }) | null>(null);
+  protected readonly submittedEntry = signal<
+    (Bookmark & { cloudSynced: boolean; noUrl: boolean; error?: string }) | null
+  >(null);
+  protected readonly isRetrying = signal(false);
 
   private readonly zoneDropdown = viewChild<ElementRef<HTMLElement>>('zoneDropdown');
 
@@ -317,6 +316,32 @@ export class StudentWorkshopComponent {
     };
   }
 
+  /** 寫入試算表並更新提示卡片（失敗時保留「重新傳送」按鈕） */
+  private async uploadAndReport(entry: Bookmark): Promise<void> {
+    const noUrl = !this.store.gasUrl().trim();
+    const result = noUrl ? { ok: false, error: '' } : await this.store.uploadBookmark(entry);
+    this.submittedEntry.set({ ...entry, cloudSynced: result.ok, noUrl, error: result.error });
+    if (result.ok) {
+      this.store.showToast(`已確認送出「${entry.studentInfo}」的記憶書籤並同步至 Google 試算表！`);
+    } else if (noUrl) {
+      this.store.showToast('此網站尚未設定老師的 Google 試算表，作品只存在這台電腦。', 'error');
+    } else {
+      this.store.showToast('作品尚未傳到老師的試算表，請按「重新傳送」再試一次。', 'error');
+    }
+  }
+
+  protected async retryUpload(): Promise<void> {
+    const entry = this.submittedEntry();
+    if (!entry || this.isRetrying()) return;
+    const current = this.store.bookmarks().find((b) => b.id === entry.id) || entry;
+    this.isRetrying.set(true);
+    try {
+      await this.uploadAndReport(current);
+    } finally {
+      this.isRetrying.set(false);
+    }
+  }
+
   /** 送出：先存本機，再（若有設定 GAS 網址）寫入老師的 Google 試算表 */
   protected async onSubmit(event: Event): Promise<void> {
     event.preventDefault();
@@ -333,31 +358,16 @@ export class StudentWorkshopComponent {
             `${(item.studentInfo || '').trim()}::${(item.sideAText || '').trim()}` === dedupKey,
         );
         if (idx >= 0) {
-          finalEntry = { ...newEntry, id: prev[idx].id };
+          finalEntry = { ...newEntry, id: prev[idx].id, cloudSynced: false };
           const updated = [...prev];
           updated[idx] = finalEntry;
           return updated;
         }
-        return [newEntry, ...prev];
+        return [{ ...newEntry, cloudSynced: false }, ...prev];
       });
+      finalEntry = { ...finalEntry, cloudSynced: false };
 
-      let cloudSynced = false;
-      const url = this.store.gasUrl();
-      if (url && url.trim()) {
-        const sheetSafeImg = await shrinkDataUrlForGoogleSheets(finalEntry.imageDataUrl);
-        const result = await postToGoogleAppsScript(url, {
-          action: 'upsert',
-          bookmark: { ...finalEntry, imageDataUrl: sheetSafeImg },
-        });
-        cloudSynced = result.ok;
-      }
-
-      this.submittedEntry.set({ ...finalEntry, cloudSynced });
-      this.store.showToast(
-        cloudSynced
-          ? `已確認送出「${finalEntry.studentInfo}」的記憶書籤並同步至 Google 試算表！`
-          : `已確認送出「${finalEntry.studentInfo}」的記憶書籤作品！`,
-      );
+      await this.uploadAndReport(finalEntry);
     } finally {
       this.isSubmitting.set(false);
     }

@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
 import { environment } from '../../environments/environment';
-import type { Bookmark } from './models';
+import type { Bookmark, GasResult } from './models';
+import { postToGoogleAppsScript, toSheetBookmark } from './gas';
 import {
   GAS_URL_STORAGE_KEY,
   INITIAL_BOOKMARKS,
@@ -86,6 +87,10 @@ export class AppStore {
     return pages;
   });
 
+  /** 送出過但還沒確認寫進試算表的作品（cloudSynced === false） */
+  readonly pendingUploads = computed(() => this.bookmarks().filter((b) => b.cloudSynced === false));
+  readonly isRetryingUploads = signal(false);
+
   readonly stats = computed(() => {
     let tainanCount = 0;
     let outerCount = 0;
@@ -100,6 +105,13 @@ export class AppStore {
   constructor() {
     // 書籤資料變動時寫回本機
     effect(() => safeSet(STORAGE_KEY, JSON.stringify(this.bookmarks())));
+
+    // 上次沒送成功的作品（例如網路斷線），重新開啟網頁時自動補送
+    setTimeout(() => {
+      if (this.gasUrl() && this.pendingUploads().length > 0) {
+        void this.retryPendingUploads(true);
+      }
+    }, 2000);
   }
 
   private initGasUrl(): string {
@@ -141,6 +153,56 @@ export class AppStore {
     safeSet(PASSCODE_STORAGE_KEY, code);
   }
 
+  private setSynced(id: string, ok: boolean): void {
+    this.bookmarks.update((prev) => prev.map((b) => (b.id === id ? { ...b, cloudSynced: ok } : b)));
+  }
+
+  /** 正在上傳中的作品（同一筆不重複同時送出） */
+  private readonly inFlight = new Map<string, Promise<GasResult>>();
+
+  /** 把一筆作品寫進 Google 試算表，並記錄是否成功 */
+  uploadBookmark(bm: Bookmark): Promise<GasResult> {
+    const running = this.inFlight.get(bm.id);
+    if (running) return running;
+    const task = (async (): Promise<GasResult> => {
+      const url = this.gasUrl();
+      if (!url || !url.trim())
+        return { ok: false, skipped: true, error: '尚未設定 Apps Script 網址' };
+      const result = await postToGoogleAppsScript(url, {
+        action: 'upsert',
+        bookmark: await toSheetBookmark(bm),
+      });
+      this.setSynced(bm.id, result.ok);
+      return result;
+    })();
+    this.inFlight.set(bm.id, task);
+    void task.finally(() => this.inFlight.delete(bm.id));
+    return task;
+  }
+
+  /** 逐筆補送尚未寫進試算表的作品 */
+  async retryPendingUploads(silent = false): Promise<{ ok: number; failed: number }> {
+    if (this.isRetryingUploads()) return { ok: 0, failed: 0 };
+    this.isRetryingUploads.set(true);
+    let ok = 0;
+    let failed = 0;
+    try {
+      for (const bm of this.pendingUploads()) {
+        const res = await this.uploadBookmark(bm);
+        if (res.ok) ok++;
+        else failed++;
+      }
+    } finally {
+      this.isRetryingUploads.set(false);
+    }
+    if (!silent || ok > 0) {
+      if (failed === 0 && ok > 0) this.showToast(`已補送 ${ok} 件作品到 Google 試算表！`);
+      else if (failed > 0)
+        this.showToast(`仍有 ${failed} 件作品無法寫入試算表，請稍後再試。`, 'error');
+    }
+    return { ok, failed };
+  }
+
   /** 從 Google 試算表拉取最新投稿並與本地合併 */
   async pullFromGoogleSheets(targetUrl = this.gasUrl(), silent = false): Promise<void> {
     const cleanUrl = (targetUrl || '').trim();
@@ -166,6 +228,7 @@ export class AppStore {
               ...(existing || {}),
               ...remote,
               originalImage: existing?.originalImage || remote.imageDataUrl || '',
+              cloudSynced: true,
             });
           });
           return Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));

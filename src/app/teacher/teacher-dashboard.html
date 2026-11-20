@@ -35,6 +35,25 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
+        @if (store.gasUrl() && store.pendingUploads().length > 0) {
+          <button
+            type="button"
+            (click)="store.retryPendingUploads(false)"
+            [disabled]="store.isRetryingUploads()"
+            title="這些作品存在這台電腦，但還沒確認寫進 Google 試算表"
+            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#A63A2B] hover:bg-[#872D21] disabled:opacity-60 text-[#FAF8F5] text-xs font-serif font-semibold shadow-xs cursor-pointer"
+          >
+            <app-icon
+              name="upload"
+              [cls]="'w-3.5 h-3.5 ' + (store.isRetryingUploads() ? 'animate-bounce' : '')"
+            />
+            <span>{{
+              store.isRetryingUploads()
+                ? '補送中...'
+                : '補送未同步作品（' + store.pendingUploads().length + '）'
+            }}</span>
+          </button>
+        }
         @if (store.gasUrl()) {
           <button
             type="button"
@@ -212,6 +231,13 @@
                       @if (bm.interviewee) {
                         <span class="text-[11px] text-[#6E6259] font-serif"
                           >訪【{{ bm.interviewee }}】</span
+                        >
+                      }
+                      @if (store.gasUrl() && bm.cloudSynced === false) {
+                        <span
+                          class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#FFF5F3] text-[#A63A2B] border border-[#A63A2B]/40"
+                          title="這件作品還沒確認寫進 Google 試算表"
+                          >未寫入試算表</span
                         >
                       }
                     </div>

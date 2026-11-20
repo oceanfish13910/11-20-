@@ -23,6 +23,10 @@ export const GOOGLE_APPS_SCRIPT_CODE = `/**
  * - 沒有班級代碼的資料（例如範例作品）寫入「未分班」分頁
  * - 分頁不存在時會自動建立；老師修改作品的班級時，資料會自動搬到新的班級分頁
  * - 舊版「書籤投稿資料」分頁的資料仍會被讀取；該筆作品下次更新時會自動搬到班級分頁
+ *
+ * 穩定性：
+ * - 同時寫入時以 LockService 排隊，拿不到鎖會回報 busy，網頁端會自動重試
+ * - 圖片超過儲存格上限時存成空白，不會存成截斷的壞圖
  */
 
 var UNASSIGNED_SHEET_NAME = '未分班';
@@ -63,7 +67,13 @@ function getOrCreateSheet_(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
-    sheet = ss.insertSheet(name);
+    try {
+      sheet = ss.insertSheet(name);
+    } catch (err) {
+      // 同時有兩位學生第一次送出同一班時，另一個請求可能已先建立分頁
+      sheet = ss.getSheetByName(name);
+      if (!sheet) throw err;
+    }
   }
   return ensureHeaders_(sheet);
 }
@@ -168,6 +178,12 @@ function deleteRows_(matches) {
   }
 }
 
+/** 儲存格上限 50,000 字元；超過時寧可留白，也不要截斷成無法顯示的壞圖 */
+function imageForCell_(dataUrl) {
+  var s = String(dataUrl || '');
+  return s.length <= 49000 ? s : '';
+}
+
 function upsertBookmarkRow_(bm) {
   var id = String(bm.id || ('gs-' + new Date().getTime()));
   var targetName = classSheetName_(bm.studentInfo);
@@ -187,7 +203,7 @@ function upsertBookmarkRow_(bm) {
     Boolean(bm.dotGrid),
     String(bm.interviewee || ''),
     String(bm.sideBText || ''),
-    String(bm.imageDataUrl || '').slice(0, 48000)
+    imageForCell_(bm.imageDataUrl)
   ];
 
   var matches = findRowsById_(id);
@@ -212,7 +228,12 @@ function upsertBookmarkRow_(bm) {
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(10000);
+  // 全班同時送出時要排隊；拿不到鎖就回報忙碌，讓網頁自動重試，避免同時寫入造成資料遺失
+  if (!lock.tryLock(30000)) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: 'busy' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
   try {
     var raw = e && e.postData && e.postData.contents ? e.postData.contents : '{}';
     var payload = JSON.parse(raw);
@@ -236,6 +257,7 @@ function doPost(e) {
       .createTextOutput(JSON.stringify({ status: 'error', message: String(err) }))
       .setMimeType(ContentService.MimeType.JSON);
   } finally {
+    SpreadsheetApp.flush();
     lock.releaseLock();
   }
 }`;
@@ -257,73 +279,142 @@ export function resolveActiveBookmarkImage(bm: Bookmark | null | undefined): str
   return bm.imageDataUrl || '';
 }
 
-// 壓縮單張 DataURL 以確保不超過 Google 試算表單一儲存格 50,000 字元上限
+/** 試算表單一儲存格上限 50,000 字元；圖片控制在此長度以下，避免被截斷成壞圖 */
+const SHEET_IMAGE_MAX_CHARS = 45000;
+
+function drawToJpeg(img: HTMLImageElement, maxDim: number, quality: number): string {
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    if (width > height) {
+      height = Math.round((height * maxDim) / width);
+      width = maxDim;
+    } else {
+      width = Math.round((width * maxDim) / height);
+      height = maxDim;
+    }
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#FAF8F5';
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(img, 0, 0, width, height);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+// 壓縮單張 DataURL，逐步降低尺寸與品質，直到不超過試算表儲存格上限
 export function shrinkDataUrlForGoogleSheets(
   dataUrl: string | undefined,
   maxDim = 440,
   quality = 0.76,
 ): Promise<string> {
   return new Promise((resolve) => {
-    if (!dataUrl || dataUrl.length < 44000) {
+    if (!dataUrl || dataUrl.length < SHEET_IMAGE_MAX_CHARS) {
       resolve(dataUrl || '');
       return;
     }
     const img = new window.Image();
     img.onload = () => {
-      let { width, height } = img;
-      if (width > maxDim || height > maxDim) {
-        if (width > height) {
-          height = Math.round((height * maxDim) / width);
-          width = maxDim;
-        } else {
-          width = Math.round((width * maxDim) / height);
-          height = maxDim;
-        }
+      let dim = maxDim;
+      let q = quality;
+      let out = drawToJpeg(img, dim, q);
+      while (out.length >= SHEET_IMAGE_MAX_CHARS && dim > 120) {
+        if (q > 0.5) q -= 0.08;
+        else dim = Math.round(dim * 0.85);
+        out = drawToJpeg(img, dim, q);
       }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d')!;
-      ctx.fillStyle = '#FAF8F5';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      resolve(out.length < SHEET_IMAGE_MAX_CHARS ? out : '');
     };
     img.onerror = () => resolve('');
     img.src = dataUrl;
   });
 }
 
-export async function postToGoogleAppsScript(gasUrl: string, payload: unknown): Promise<GasResult> {
-  if (!gasUrl || !gasUrl.trim()) return { ok: false, skipped: true };
-  const cleanUrl = gasUrl.trim();
-  const bodyStr = JSON.stringify(payload);
+/**
+ * 整理成要寫入試算表的資料：只送 Code.gs 會用到的欄位。
+ * 原本會連同 5 張濾鏡原圖一起送出（每筆約 440 KB），學校網路不穩時很容易失敗。
+ */
+export async function toSheetBookmark(bm: Bookmark): Promise<Bookmark> {
+  const imageDataUrl = await shrinkDataUrlForGoogleSheets(
+    resolveActiveBookmarkImage(bm) || bm.imageDataUrl,
+  );
+  return {
+    id: bm.id,
+    createdAt: bm.createdAt,
+    studentInfo: bm.studentInfo,
+    locationZone: bm.locationZone,
+    customZoneName: bm.customZoneName,
+    landmarkLabel: bm.landmarkLabel,
+    mapCoords: bm.mapCoords,
+    sideAText: bm.sideAText,
+    visualMode: bm.visualMode,
+    dotGrid: bm.dotGrid,
+    interviewee: bm.interviewee,
+    sideBText: bm.sideBText,
+    imageDataUrl,
+  };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** 送出一次：只有收到 Apps Script 回傳 {status:'ok'} 才算成功 */
+async function postOnce(url: string, body: string): Promise<GasResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
   try {
-    const res = await fetch(cleanUrl, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: bodyStr,
+      body,
       redirect: 'follow',
+      signal: controller.signal,
     });
     const text = await res.text();
     try {
       const json = JSON.parse(text);
-      return { ok: json.status === 'ok', data: json };
+      return json.status === 'ok'
+        ? { ok: true, data: json }
+        : {
+            ok: false,
+            data: json,
+            error:
+              json.message === 'busy'
+                ? '老師的試算表正忙（很多人同時送出），請稍候再按「重新傳送」'
+                : String(json.message || 'Apps Script 回傳錯誤'),
+          };
     } catch {
-      return { ok: res.ok };
+      // 回傳的不是 JSON：多半是 Google 登入頁，代表部署權限不是「所有人」
+      return {
+        ok: false,
+        error: `Apps Script 回傳非預期內容（HTTP ${res.status}），請確認部署存取權為「所有人」`,
+      };
     }
-  } catch {
-    // 備援：若受跨網域瀏覽器策略限制，改以 no-cors 送出確保資料寫入試算表
-    try {
-      await fetch(cleanUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: bodyStr,
-      });
-      return { ok: true, opaque: true };
-    } catch (err2) {
-      return { ok: false, error: String(err2) };
-    }
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+/**
+ * 寫入 Google 試算表。失敗時自動重試（寫入以 id 為準，重送不會產生重複資料）。
+ * 只有確認收到 {status:'ok'} 才回傳 ok:true。
+ */
+export async function postToGoogleAppsScript(
+  gasUrl: string,
+  payload: unknown,
+  retries = 3,
+): Promise<GasResult> {
+  if (!gasUrl || !gasUrl.trim())
+    return { ok: false, skipped: true, error: '尚未設定 Apps Script 網址' };
+  const cleanUrl = gasUrl.trim();
+  const bodyStr = JSON.stringify(payload);
+  let last: GasResult = { ok: false };
+  for (let attempt = 0; attempt < retries; attempt++) {
+    if (attempt > 0) await sleep(1500 * attempt + Math.random() * 1000);
+    last = await postOnce(cleanUrl, bodyStr);
+    if (last.ok) return last;
+  }
+  return last;
 }

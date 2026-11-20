@@ -16,6 +16,10 @@
  * - 沒有班級代碼的資料（例如範例作品）寫入「未分班」分頁
  * - 分頁不存在時會自動建立；老師修改作品的班級時，資料會自動搬到新的班級分頁
  * - 舊版「書籤投稿資料」分頁的資料仍會被讀取；該筆作品下次更新時會自動搬到班級分頁
+ *
+ * 穩定性：
+ * - 同時寫入時以 LockService 排隊，拿不到鎖會回報 busy，網頁端會自動重試
+ * - 圖片超過儲存格上限時存成空白，不會存成截斷的壞圖
  */
 
 var UNASSIGNED_SHEET_NAME = '未分班';
@@ -56,7 +60,13 @@ function getOrCreateSheet_(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
-    sheet = ss.insertSheet(name);
+    try {
+      sheet = ss.insertSheet(name);
+    } catch (err) {
+      // 同時有兩位學生第一次送出同一班時，另一個請求可能已先建立分頁
+      sheet = ss.getSheetByName(name);
+      if (!sheet) throw err;
+    }
   }
   return ensureHeaders_(sheet);
 }
@@ -161,6 +171,12 @@ function deleteRows_(matches) {
   }
 }
 
+/** 儲存格上限 50,000 字元；超過時寧可留白，也不要截斷成無法顯示的壞圖 */
+function imageForCell_(dataUrl) {
+  var s = String(dataUrl || '');
+  return s.length <= 49000 ? s : '';
+}
+
 function upsertBookmarkRow_(bm) {
   var id = String(bm.id || ('gs-' + new Date().getTime()));
   var targetName = classSheetName_(bm.studentInfo);
@@ -180,7 +196,7 @@ function upsertBookmarkRow_(bm) {
     Boolean(bm.dotGrid),
     String(bm.interviewee || ''),
     String(bm.sideBText || ''),
-    String(bm.imageDataUrl || '').slice(0, 48000)
+    imageForCell_(bm.imageDataUrl)
   ];
 
   var matches = findRowsById_(id);
@@ -205,7 +221,12 @@ function upsertBookmarkRow_(bm) {
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(10000);
+  // 全班同時送出時要排隊；拿不到鎖就回報忙碌，讓網頁自動重試，避免同時寫入造成資料遺失
+  if (!lock.tryLock(30000)) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: 'busy' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
   try {
     var raw = e && e.postData && e.postData.contents ? e.postData.contents : '{}';
     var payload = JSON.parse(raw);
@@ -229,6 +250,7 @@ function doPost(e) {
       .createTextOutput(JSON.stringify({ status: 'error', message: String(err) }))
       .setMimeType(ContentService.MimeType.JSON);
   } finally {
+    SpreadsheetApp.flush();
     lock.releaseLock();
   }
 }
