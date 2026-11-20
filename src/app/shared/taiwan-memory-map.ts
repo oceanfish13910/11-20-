@@ -29,6 +29,8 @@ const TAINAN_LABELS = [
 /** 三段式（全臺／臺南／府城）記憶足跡互動地圖 */
 @Component({
   selector: 'app-taiwan-memory-map',
+  // 宿主元素需為 block，父層 space-y-* 的間距才會生效（與原版一致）
+  host: { class: 'block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent],
   templateUrl: './taiwan-memory-map.html',
