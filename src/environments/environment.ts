@@ -12,7 +12,7 @@
  * 也可以用網址參數 ?gasUrl=... 暫時覆蓋，或在教師後台「連動設定」修改。
  */
 export const environment = {
-  gasUrl: '',
+  gasUrl: 'https://script.google.com/macros/s/AKfycbzV28v-rCbVQs4w-je8C4nr-j5TazQHk-BHn8Dh6rhCIebO8_LAAKa7eBgFFDEAI_s/exec',
   /** 教師後台預設驗證碼（只是前端擋一下，不是真正的安全機制） */
   defaultTeacherPasscode: '105',
 };
