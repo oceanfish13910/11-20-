@@ -5,9 +5,14 @@ import type { Bookmark, LocationZone } from './models';
 // 1. Persistence Constants, Storage Keys & Geographic Anchors
 //    定義本機暫存鍵值、Google 試算表連線設定鍵值、竹園岡基準座標與九大地理分區
 // ============================================================================
-export const STORAGE_KEY = 'tnfsh_105_bookmarks_v8';
-export const GAS_URL_STORAGE_KEY = 'tnfsh_105_gas_url_v1';
-export const PASSCODE_STORAGE_KEY = 'tnfsh_105_teacher_passcode_v1';
+// 注意：本站與舊版網站（/-105-2-/）同在 oceanfish13910.github.io 底下，
+// 瀏覽器的 localStorage 是共用的，所以這裡的鍵值必須和舊版不同，
+// 否則舊版網站存的作品（送到舊的試算表）會混進這裡的教師後台。
+export const STORAGE_KEY = 'clae_bookmarks_v1';
+export const GAS_URL_STORAGE_KEY = 'clae_gas_url_v1';
+export const PASSCODE_STORAGE_KEY = 'clae_teacher_passcode_v1';
+/** 舊鍵值：只用來搬移本站「尚未送出成功」的作品 */
+export const LEGACY_STORAGE_KEY = 'tnfsh_105_bookmarks_v8';
 
 export const TNFSH_ANCHOR: { x: number; y: number; label: string } = {
   x: 43.2,

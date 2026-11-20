@@ -2,9 +2,11 @@ import { Injectable, computed, effect, signal } from '@angular/core';
 import { environment } from '../../environments/environment';
 import type { Bookmark, GasResult } from './models';
 import { postToGoogleAppsScript, toSheetBookmark } from './gas';
+import { geoSorted, keepLatestPerStudent, studentKey } from './student-key';
 import {
   GAS_URL_STORAGE_KEY,
   INITIAL_BOOKMARKS,
+  LEGACY_STORAGE_KEY,
   LOCATION_ZONES,
   PASSCODE_STORAGE_KEY,
   STORAGE_KEY,
@@ -63,19 +65,31 @@ export class AppStore {
 
   readonly bookmarks = signal<Bookmark[]>(this.initBookmarks());
 
+  /** 試算表後端（Code.gs）回報的版本；null 表示尚未讀取 */
+  readonly backendVersion = signal<number | null>(null);
+  /** 目前網站需要的 Code.gs 版本（分班、去重複、地理排序） */
+  readonly requiredBackendVersion = 3;
+
   readonly toast = signal<Toast | null>(null);
 
   // ---- A4 列印佇列（教師後台與全頁列印容器共用）----
-  /** 預設選取前 4 筆典範作品，方便老師立即預覽 A4 拼版 */
-  readonly selectedPrintIds = signal<string[]>(INITIAL_BOOKMARKS.slice(0, 4).map((b) => b.id));
+  /**
+   * null 代表「全部作品、依地理位置排序」（預設，之後拉進來的新作品也會自動加入）；
+   * 老師手動勾選或排序後，改為明確的 id 清單。
+   */
+  readonly selectedPrintIds = signal<string[] | null>(null);
   readonly printPreviewSide = signal<'front' | 'back'>('front');
   readonly showCropMarks = signal(true);
 
+  /** 依地理位置排序的全部作品 */
+  readonly sortedBookmarks = computed(() => geoSorted(this.bookmarks()));
+
+  /** 列印佇列：一律依地理位置排序，相鄰地標會排在同一張 A4 */
   readonly selectedPrintBookmarks = computed(() => {
-    const map = new Map(this.bookmarks().map((b) => [b.id, b] as const));
-    return this.selectedPrintIds()
-      .map((id) => map.get(id))
-      .filter((b): b is Bookmark => Boolean(b));
+    const ids = this.selectedPrintIds();
+    if (ids === null) return this.sortedBookmarks();
+    const chosen = new Set(ids);
+    return this.sortedBookmarks().filter((b) => chosen.has(b.id));
   });
 
   /** 每 4 枚書籤自動分成 1 張 A4 橫式頁面 */
@@ -127,12 +141,34 @@ export class AppStore {
       const saved = safeGet(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return keepLatestPerStudent(parsed);
+      }
+      // 第一次使用新鍵值：從舊鍵值搬過來「本站送出但還沒寫進試算表」的作品（舊版網站的資料不搬）
+      const legacy = safeGet(LEGACY_STORAGE_KEY);
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (Array.isArray(parsed)) {
+          const pending = parsed.filter((b: Bookmark) => b && b.cloudSynced === false);
+          if (pending.length) return keepLatestPerStudent(pending);
+        }
       }
     } catch (e) {
       console.warn('localStorage read skipped:', e);
     }
-    return INITIAL_BOOKMARKS;
+    // 已連動試算表時，不放範例作品，避免混進老師的列印清單
+    return this.gasUrl() ? [] : INITIAL_BOOKMARKS;
+  }
+
+  /** 新增或取代作品：同一位學生（班級＋姓名）只保留這一筆，並沿用原本的 id */
+  addOrReplaceByStudent(entry: Bookmark): Bookmark {
+    const key = studentKey(entry.studentInfo);
+    let saved = entry;
+    this.bookmarks.update((prev) => {
+      const existing = prev.find((b) => studentKey(b.studentInfo) === key);
+      if (existing) saved = { ...entry, id: existing.id };
+      return [saved, ...prev.filter((b) => studentKey(b.studentInfo) !== key && b.id !== saved.id)];
+    });
+    return saved;
   }
 
   showToast(message: string, type: 'success' | 'error' = 'success'): void {
@@ -218,6 +254,7 @@ export class AppStore {
         redirect: 'follow',
       });
       const data = await res.json();
+      this.backendVersion.set(typeof data.version === 'number' ? data.version : 1);
       if (data.status === 'ok' && Array.isArray(data.bookmarks)) {
         this.bookmarks.update((prev) => {
           const map = new Map<string, Bookmark>();
@@ -231,7 +268,8 @@ export class AppStore {
               cloudSynced: true,
             });
           });
-          return Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          // 同一位學生只留最後一筆，再依地理位置排序
+          return geoSorted(keepLatestPerStudent(Array.from(map.values())));
         });
         this.lastSyncTime.set(new Date().toLocaleTimeString('zh-TW', { hour12: false }));
         if (!silent)

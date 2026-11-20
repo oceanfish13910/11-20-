@@ -11,6 +11,7 @@ import {
 import type { Bookmark } from '../core/models';
 import { AppStore } from '../core/app-store';
 import { LOCATION_ZONES } from '../core/constants';
+import { CLASS_CODES, classOf } from '../core/student-key';
 import {
   GOOGLE_APPS_SCRIPT_CODE,
   postToGoogleAppsScript,
@@ -50,14 +51,19 @@ export class TeacherDashboardComponent {
   // ---- 分頁 1：作品總覽 ----
   protected readonly searchQuery = signal('');
   protected readonly filterZone = signal('ALL');
+  /** 班級篩選：'ALL'、'205'…，或 'NONE'（未分班） */
+  protected readonly filterClass = signal('ALL');
   protected readonly editingBookmark = signal<Bookmark | null>(null);
   protected readonly confirmDeleteId = signal<string | null>(null);
 
   protected readonly filteredBookmarks = computed(() => {
     const q = this.searchQuery().trim().toLowerCase();
     const zone = this.filterZone();
-    return this.store.bookmarks().filter((bm) => {
+    const cls = this.filterClass();
+    // 依地理位置排序（由竹園岡出發，最鄰近者優先）
+    return this.store.sortedBookmarks().filter((bm) => {
       if (zone !== 'ALL' && bm.locationZone !== zone) return false;
+      if (cls !== 'ALL' && (classOf(bm.studentInfo) || 'NONE') !== cls) return false;
       if (!q) return true;
       const hay = [
         bm.studentInfo,
@@ -73,6 +79,25 @@ export class TeacherDashboardComponent {
         .toLowerCase();
       return hay.includes(q);
     });
+  });
+
+  /** 各班作品數（班級篩選標籤用） */
+  protected readonly classCounts = computed(() => {
+    const list = this.store.bookmarks();
+    const items: { id: string; label: string; count: number }[] = CLASS_CODES.map((c) => ({
+      id: c as string,
+      label: `${c} 班`,
+      count: list.filter((b) => classOf(b.studentInfo) === c).length,
+    }));
+    const none = list.filter((b) => !classOf(b.studentInfo)).length;
+    if (none > 0) items.push({ id: 'NONE', label: '未分班', count: none });
+    return items;
+  });
+
+  /** 試算表後端還是舊版 Code.gs（不會分班／去重複／排序） */
+  protected readonly backendOutdated = computed(() => {
+    const v = this.store.backendVersion();
+    return v !== null && v < this.store.requiredBackendVersion;
   });
 
   /** 有作品的分區與數量（篩選標籤用） */
@@ -150,11 +175,18 @@ export class TeacherDashboardComponent {
   }
 
   protected isSelected(id: string): boolean {
-    return this.store.selectedPrintIds().includes(id);
+    const ids = this.store.selectedPrintIds();
+    return ids === null || ids.includes(id);
+  }
+
+  /** 目前實際選取的 id（「全部」時展開成清單） */
+  private currentSelection(): string[] {
+    return this.store.selectedPrintBookmarks().map((b) => b.id);
   }
 
   protected toggleSelection(id: string): void {
-    this.store.selectedPrintIds.update((prev) =>
+    const prev = this.currentSelection();
+    this.store.selectedPrintIds.set(
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
     );
   }
@@ -181,7 +213,9 @@ export class TeacherDashboardComponent {
 
   protected async onDelete(id: string): Promise<void> {
     this.store.bookmarks.update((prev) => prev.filter((b) => b.id !== id));
-    this.store.selectedPrintIds.update((prev) => prev.filter((item) => item !== id));
+    this.store.selectedPrintIds.update((prev) =>
+      prev === null ? null : prev.filter((item) => item !== id),
+    );
     this.confirmDeleteId.set(null);
     this.store.showToast('已刪除該筆書籤作品。');
     const url = this.store.gasUrl();

@@ -282,6 +282,10 @@ export class StudentWorkshopComponent {
       this.store.showToast('請填寫「正面題字・府城或家鄉印象」短文。', 'error');
       return null;
     }
+    if (!f.sideBText.trim()) {
+      this.store.showToast('請填寫「背面尺素・與家人長輩訪談的故事」（300 字以內）。', 'error');
+      return null;
+    }
     if (this.sideACount() > 50) {
       this.store.showToast('正面題字超過 50 字上限，請適度精簡字句。', 'error');
       return null;
@@ -350,22 +354,8 @@ export class StudentWorkshopComponent {
 
     this.isSubmitting.set(true);
     try {
-      const dedupKey = `${newEntry.studentInfo}::${newEntry.sideAText}`;
-      let finalEntry = newEntry;
-      this.store.bookmarks.update((prev) => {
-        const idx = prev.findIndex(
-          (item) =>
-            `${(item.studentInfo || '').trim()}::${(item.sideAText || '').trim()}` === dedupKey,
-        );
-        if (idx >= 0) {
-          finalEntry = { ...newEntry, id: prev[idx].id, cloudSynced: false };
-          const updated = [...prev];
-          updated[idx] = finalEntry;
-          return updated;
-        }
-        return [{ ...newEntry, cloudSynced: false }, ...prev];
-      });
-      finalEntry = { ...finalEntry, cloudSynced: false };
+      // 同一位學生（班級＋姓名）重複送出時，只保留最後一筆，並沿用原本的 id
+      const finalEntry = this.store.addOrReplaceByStudent({ ...newEntry, cloudSynced: false });
 
       await this.uploadAndReport(finalEntry);
     } finally {

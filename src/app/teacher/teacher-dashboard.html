@@ -12,6 +12,22 @@
 <main
   class="no-print cotton-paper-bg max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6"
 >
+  @if (backendOutdated()) {
+    <div
+      role="alert"
+      class="p-4 rounded-2xl bg-[#FFF5F3] border border-[#A63A2B]/50 text-sm text-[#262623] space-y-1"
+    >
+      <div class="flex items-center gap-2 font-serif font-bold text-[#A63A2B]">
+        <app-icon name="alert-circle" cls="w-4 h-4" />
+        <span>Google 試算表的 Apps Script 還是舊版，資料不會分班、去重複與排序</span>
+      </div>
+      <p class="text-xs text-[#5C524B] pl-6">
+        請到「3. Google 試算表與協作平台連動設定」複製右側最新的 Code.gs，貼到試算表的 Apps Script
+        後，點「部署 → 管理部署作業 → 鉛筆圖示 → 版本選『新版本』→ 部署」。
+      </p>
+    </div>
+  }
+
   <!-- 統計摘要與子分頁 -->
   <div class="bg-[#F4F0E8] border border-[#D8D0C5] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -163,6 +179,37 @@
               </button>
             }
           </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1.5 pt-1">
+          <span class="text-xs font-serif font-bold text-[#5C524B] mr-1">班級：</span>
+          <button
+            type="button"
+            (click)="filterClass.set('ALL')"
+            class="px-2.5 py-1 rounded-lg text-xs font-serif font-semibold cursor-pointer"
+            [class]="
+              filterClass() === 'ALL'
+                ? 'bg-[#262623] text-[#FAF8F5]'
+                : 'bg-[#F4F0E8] text-[#5C524B] hover:text-[#262623]'
+            "
+          >
+            全部班級（{{ store.bookmarks().length }}）
+          </button>
+          @for (c of classCounts(); track c.id) {
+            <button
+              type="button"
+              (click)="filterClass.set(c.id)"
+              class="px-2.5 py-1 rounded-lg text-xs font-serif font-semibold cursor-pointer"
+              [class]="
+                filterClass() === c.id
+                  ? 'bg-[#2F5738] text-[#FAF8F5]'
+                  : 'bg-[#F4F0E8] text-[#5C524B] hover:text-[#262623]'
+              "
+            >
+              {{ c.label }}（{{ c.count }}）
+            </button>
+          }
+          <span class="text-[11px] text-[#8A7F76] ml-1">※ 作品依地理位置排序（由竹園岡出發）</span>
         </div>
 
         <div class="flex flex-wrap items-center gap-1.5 pt-1">
